@@ -284,7 +284,7 @@ fn make_identifier_token(
     "fun" -> token.Fun
     "for" -> token.For
     "if" -> token.If
-    "null" -> token.Null
+    "nil" -> token.Nil
     "or" -> token.Or
     "print" -> token.Print
     "return" -> token.Return

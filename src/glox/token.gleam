@@ -37,7 +37,7 @@ pub type TokenType {
   Fun
   For
   If
-  Null
+  Nil
   Or
   Print
   Return
@@ -158,8 +158,8 @@ pub fn if_(line: Int, column: Int) -> Token {
   single_line_token(If, line, column, column + 1)
 }
 
-pub fn null(line: Int, column: Int) -> Token {
-  single_line_token(Null, line, column, column + 3)
+pub fn nil(line: Int, column: Int) -> Token {
+  single_line_token(Nil, line, column, column + 2)
 }
 
 pub fn or(line: Int, column: Int) -> Token {

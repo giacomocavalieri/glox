@@ -221,7 +221,7 @@ pub fn keywords_test() {
     #("fun", token.Fun, 3),
     #("for", token.For, 3),
     #("if", token.If, 2),
-    #("null", token.Null, 4),
+    #("nil", token.Nil, 3),
     #("or", token.Or, 2),
     #("print", token.Print, 5),
     #("return", token.Return, 6),
