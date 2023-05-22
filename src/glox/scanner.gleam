@@ -59,8 +59,9 @@ pub fn scan(scanner: Scanner) -> List(Token) {
   |> iterator.to_list()
 }
 
-/// It returns the next token scanned from the source code
-/// of the scanner. Also returns the new updated scanner.
+/// Scans the scanner's input and returns the next token it finds.
+/// Also returns the updated scanner updating the current line and
+/// column according to the scanned token.
 pub fn next(scanner: Scanner) -> #(Scanner, Token) {
   let line = scanner.line
   let column = scanner.column
@@ -78,7 +79,7 @@ pub fn next(scanner: Scanner) -> #(Scanner, Token) {
     // Since a token must still be returned by a call to `next`,
     // recursivley call it on the new scanner to return a token.
     ["\r\n", ..rest] | ["\n", ..rest] ->
-      Scanner(graphemes: rest, column: 1, line: scanner.line + 1)
+      Scanner(graphemes: rest, column: 1, line: line + 1)
       |> next
 
     // All whitespaces are ignored. The behaviour is analogous to
@@ -182,24 +183,9 @@ fn is_identifier(grapheme: String) -> Bool {
 /// Advance the scanner by dropping a number of graphemes from the source code
 /// equal to the given offset. The column number is also updated accordingly.
 fn advance(scanner: Scanner, by offset: Int) -> Scanner {
-  let rest = list.drop(scanner.graphemes, up_to: offset)
-  update_scanner(scanner, rest, offset)
-}
-
-/// Update a scanner by replacing the graphemes with a new list of graphemes
-/// and advancing the current column with the provided offset.
-///
-/// It's up to the user to make sure that the number of dropped graphemes
-/// is equal to the `advance_offset`, the function does not make any
-/// check as it's just a shorthand to keep code more concise.
-fn update_scanner(
-  scanner: Scanner,
-  new_graphemes: List(String),
-  advance_column: Int,
-) -> Scanner {
   Scanner(
-    graphemes: new_graphemes,
-    column: scanner.column + advance_column,
+    graphemes: list.drop(scanner.graphemes, up_to: offset),
+    column: scanner.column + offset,
     line: scanner.line,
   )
 }
@@ -398,15 +384,15 @@ fn scan_identifier(
   }
 }
 
-/// Given an identifier string it returns its corresponding token
-/// that could either be a keyword token (like and, or, etc.) or just
-/// an identifier.
 fn identifier_token(
   identifier: StringBuilder,
   line: Int,
   column: Int,
   identifier_length: Int,
 ) -> Token {
+  // Given an identifier string it returns its corresponding token
+  // that could either be a keyword token (like and, or, etc.) or just
+  // an identifier.
   let token_type = case string_builder.to_string(identifier) {
     "and" -> token.And
     "class" -> token.Class
