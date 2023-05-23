@@ -54,6 +54,50 @@ pub type Token {
   Token(token_type: TokenType, span: Span)
 }
 
+pub fn lexeme(token: Token) -> String {
+  case token.token_type {
+    Eof -> ""
+    LeftParen -> "("
+    RightParen -> ")"
+    LeftBrace -> "{"
+    RightBrace -> "}"
+    Comma -> ","
+    Dot -> "."
+    Semicolon -> ";"
+    Plus -> "+"
+    Minus -> "-"
+    Star -> "*"
+    Slash -> "/"
+    Bang -> "!"
+    BangEqual -> "!="
+    Equal -> "="
+    EqualEqual -> "=="
+    Greater -> ">"
+    GreaterEqual -> ">="
+    Less -> "<"
+    LessEqual -> "<="
+    And -> "and"
+    Class -> "class"
+    Else -> "else"
+    False -> "false"
+    Fun -> "fun"
+    For -> "for"
+    If -> "if"
+    Nil -> "nil"
+    Or -> "or"
+    Print -> "print"
+    Return -> "return"
+    Super -> "super"
+    This -> "this"
+    True -> "true"
+    Var -> "var"
+    While -> "while"
+    Identifier(value) -> value
+    String(value) -> value
+    Number(value) -> value
+  }
+}
+
 pub fn left_paren(line: Int, column: Int) -> Token {
   single_line_token(LeftParen, line, column, column)
 }
