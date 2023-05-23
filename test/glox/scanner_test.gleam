@@ -1,5 +1,5 @@
 import glacier/should
-import glox/scanner
+import glox/scanner.{ScannerError}
 import glox/token.{Token}
 import gleam/pair
 import gleam/list
@@ -15,7 +15,7 @@ fn map_3(over list: List(#(a, b, c)), with fun: fn(a, b, c) -> d) -> List(d) {
   |> list.map(fn(triple) { fun(triple.0, triple.1, triple.2) })
 }
 
-fn scan_first(source: String) -> Token {
+fn scan_first(source: String) -> Result(Token, ScannerError) {
   source
   |> scanner.new
   |> scanner.next
@@ -25,26 +25,31 @@ fn scan_first(source: String) -> Token {
 pub fn ignores_newline_test() {
   "\n"
   |> scan_first
+  |> should.be_ok
   |> should.equal(token.eof(2, 1))
 
   "\r\n"
   |> scan_first
+  |> should.be_ok
   |> should.equal(token.eof(2, 1))
 }
 
 pub fn ignores_whitespace_test() {
   "  \t  "
   |> scan_first
+  |> should.be_ok
   |> should.equal(token.eof(1, 6))
 }
 
 pub fn ignores_comment_test() {
   "// Yay a comment!\n"
   |> scan_first
+  |> should.be_ok
   |> should.equal(token.eof(2, 1))
 
   "// Yay a comment!"
   |> scan_first
+  |> should.be_ok
   |> should.equal(token.eof(1, 18))
 }
 
@@ -70,6 +75,7 @@ pub fn single_char_tokens_test() {
   |> map_2(fn(source, expected_type) {
     source
     |> scan_first
+    |> should.be_ok
     |> should.equal(Token(
       token_type: expected_type,
       span: span.single_line(on: 1, starts_at: 1, ends_at: 1),
@@ -87,6 +93,7 @@ pub fn double_char_tokens_test() {
   |> map_2(fn(source, expected_type) {
     source
     |> scan_first
+    |> should.be_ok
     |> should.equal(Token(
       token_type: expected_type,
       span: span.single_line(on: 1, starts_at: 1, ends_at: 2),
@@ -97,6 +104,7 @@ pub fn double_char_tokens_test() {
 pub fn number_test() {
   "1"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Number("1"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 1),
@@ -104,6 +112,7 @@ pub fn number_test() {
 
   "123"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Number("123"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 3),
@@ -111,6 +120,7 @@ pub fn number_test() {
 
   "123."
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Number("123."),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 4),
@@ -118,6 +128,7 @@ pub fn number_test() {
 
   "123.123"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Number("123.123"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 7),
@@ -125,6 +136,7 @@ pub fn number_test() {
 
   "9876543210.0123456789"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Number("9876543210.0123456789"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 21),
@@ -133,6 +145,7 @@ pub fn number_test() {
   "123 12.2\n11.1"
   |> scanner.new
   |> scanner.scan
+  |> should.be_ok
   |> should.equal([
     Token(
       token_type: token.Number("123"),
@@ -151,6 +164,7 @@ pub fn number_test() {
   "-11"
   |> scanner.new
   |> scanner.scan
+  |> should.be_ok
   |> should.equal([
     token.minus(1, 1),
     Token(
@@ -163,6 +177,7 @@ pub fn number_test() {
 pub fn string_test() {
   "\"\""
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.String(""),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 2),
@@ -170,6 +185,7 @@ pub fn string_test() {
 
   "\"Hello, world!\""
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.String("Hello, world!"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 15),
@@ -177,6 +193,7 @@ pub fn string_test() {
 
   "\"A multiline\nstring!\""
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.String("A multiline\nstring!"),
     span: Span(line_start: 1, line_end: 2, column_start: 1, column_end: 8),
@@ -184,6 +201,7 @@ pub fn string_test() {
 
   "\"\ntest\""
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.String("\ntest"),
     span: Span(line_start: 1, line_end: 2, column_start: 1, column_end: 5),
@@ -192,6 +210,7 @@ pub fn string_test() {
   " \"test\nmultiline\" 123 \"test\"11"
   |> scanner.new
   |> scanner.scan
+  |> should.be_ok
   |> should.equal([
     Token(
       token_type: token.String("test\nmultiline"),
@@ -234,6 +253,7 @@ pub fn keywords_test() {
   |> map_3(fn(source, expected_type, length) {
     source
     |> scan_first
+    |> should.be_ok
     |> should.equal(Token(
       token_type: expected_type,
       span: span.single_line(on: 1, starts_at: 1, ends_at: length),
@@ -243,6 +263,7 @@ pub fn keywords_test() {
   "if.and or else"
   |> scanner.new
   |> scanner.scan
+  |> should.be_ok
   |> should.equal([
     token.if_(1, 1),
     token.dot(1, 3),
@@ -255,6 +276,7 @@ pub fn keywords_test() {
 pub fn identifiers_test() {
   "foo"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("foo"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 3),
@@ -262,6 +284,7 @@ pub fn identifiers_test() {
 
   "foo_bar"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("foo_bar"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 7),
@@ -269,6 +292,7 @@ pub fn identifiers_test() {
 
   "foo123"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("foo123"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 6),
@@ -276,6 +300,7 @@ pub fn identifiers_test() {
 
   "_foo"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("_foo"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 4),
@@ -283,6 +308,7 @@ pub fn identifiers_test() {
 
   "_123"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("_123"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 4),
@@ -290,6 +316,7 @@ pub fn identifiers_test() {
 
   "foo_123"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("foo_123"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 7),
@@ -297,6 +324,7 @@ pub fn identifiers_test() {
 
   "andif"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("andif"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 5),
@@ -304,6 +332,7 @@ pub fn identifiers_test() {
 
   "and_if"
   |> scan_first
+  |> should.be_ok
   |> should.equal(Token(
     token_type: token.Identifier("and_if"),
     span: span.single_line(on: 1, starts_at: 1, ends_at: 6),
@@ -312,6 +341,7 @@ pub fn identifiers_test() {
   "foo bar baz"
   |> scanner.new
   |> scanner.scan
+  |> should.be_ok
   |> should.equal([
     Token(
       token_type: token.Identifier("foo"),
@@ -326,4 +356,8 @@ pub fn identifiers_test() {
       span: span.single_line(on: 1, starts_at: 9, ends_at: 11),
     ),
   ])
+}
+
+pub fn error_case_test() {
+  todo("add test for scanner errors!")
 }

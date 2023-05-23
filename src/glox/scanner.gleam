@@ -22,6 +22,17 @@ pub opaque type Scanner {
   Scanner(graphemes: List(String), line: Int, column: Int)
 }
 
+/// The possible error that could occur during the scanning process
+pub type ScannerError {
+  /// When the scanner encounters a grapheme that does not belong
+  /// to its alphabet
+  UnexpectedGrapheme(grapheme: String, span: Span)
+
+  /// When the scanner is scanning a string literal and
+  /// reaches the end of file without having met the closing "
+  UnterminatedStringLiteral(span: Span)
+}
+
 /// Create a new scanner given a source string.
 pub fn new(source: String) -> Scanner {
   // A new scanner is built by splitting the source code in graphemes
@@ -30,15 +41,15 @@ pub fn new(source: String) -> Scanner {
 }
 
 /// Get a stream of tokens from a scanner.
-pub fn iterator(scanner: Scanner) -> Iterator(Token) {
+pub fn iterator(scanner: Scanner) -> Iterator(Result(Token, ScannerError)) {
   // Keep calling the `next` function until Eof is reached.
   // `next` also provides the new state for the scanning process
   // to continue, that is why the new scanner is used as the
   // accumulator for the next unfolding step
   use scanner <- iterator.unfold(from: scanner)
   case next(scanner) {
-    #(_scanner, Token(token_type: token.Eof, ..)) -> iterator.Done
-    #(scanner, token) -> iterator.Next(element: token, accumulator: scanner)
+    #(_scanner, Ok(Token(token_type: token.Eof, ..))) -> iterator.Done
+    #(scanner, result) -> iterator.Next(element: result, accumulator: scanner)
   }
 }
 
@@ -54,15 +65,17 @@ pub fn iterator(scanner: Scanner) -> Iterator(Token) {
 /// //   Token(RightParen, Span(1, 1, 2, 2)),
 /// // ]
 /// ```
-pub fn scan(scanner: Scanner) -> List(Token) {
+pub fn scan(scanner: Scanner) -> Result(List(Token), List(ScannerError)) {
   iterator(scanner)
-  |> iterator.to_list()
+  |> iterator.to_list
+  //|> result.partition
+  |> todo("result.partition is in gleam 0.29")
 }
 
 /// Scans the scanner's input and returns the next token it finds.
 /// Also returns the updated scanner updating the current line and
 /// column according to the scanned token.
-pub fn next(scanner: Scanner) -> #(Scanner, Token) {
+pub fn next(scanner: Scanner) -> #(Scanner, Result(Token, ScannerError)) {
   let line = scanner.line
   let column = scanner.column
 
@@ -70,7 +83,7 @@ pub fn next(scanner: Scanner) -> #(Scanner, Token) {
   case scanner.graphemes {
     // If there's no graphemes left in the source code
     // return the EOF token.
-    [] -> #(scanner, token.eof(line, column))
+    [] -> #(scanner, Ok(token.eof(line, column)))
 
     // All newlines are ignored but the state of the scanner must
     // be updated to take into account the new line: the column
@@ -112,25 +125,37 @@ pub fn next(scanner: Scanner) -> #(Scanner, Token) {
     // token came first, any sequence of two consecutive equals would be matched as a pair
     // of `Equal` tokens instead of an `EqualEqual` token.
     // The same concept applies for a couple more tokens: > and >=, ! and !=, < and <=.
-    ["(", ..] -> #(advance(scanner, by: 1), token.left_paren(line, column))
-    [")", ..] -> #(advance(scanner, by: 1), token.right_paren(line, column))
-    ["{", ..] -> #(advance(scanner, by: 1), token.left_brace(line, column))
-    ["}", ..] -> #(advance(scanner, by: 1), token.right_brace(line, column))
-    ["+", ..] -> #(advance(scanner, by: 1), token.plus(line, column))
-    ["-", ..] -> #(advance(scanner, by: 1), token.minus(line, column))
-    ["*", ..] -> #(advance(scanner, by: 1), token.star(line, column))
-    ["/", ..] -> #(advance(scanner, by: 1), token.slash(line, column))
-    ["=", "=", ..] -> #(advance(scanner, 2), token.equal_equal(line, column))
-    ["!", "=", ..] -> #(advance(scanner, by: 2), token.bang_equal(line, column))
-    [">", "=", ..] -> #(advance(scanner, 2), token.greater_equal(line, column))
-    [">", ..] -> #(advance(scanner, by: 1), token.greater(line, column))
-    ["<", "=", ..] -> #(advance(scanner, by: 2), token.less_equal(line, column))
-    ["<", ..] -> #(advance(scanner, by: 1), token.less(line, column))
-    [",", ..] -> #(advance(scanner, by: 1), token.comma(line, column))
-    [";", ..] -> #(advance(scanner, by: 1), token.semicolon(line, column))
-    [".", ..] -> #(advance(scanner, by: 1), token.dot(line, column))
-    ["!", ..] -> #(advance(scanner, by: 1), token.bang(line, column))
-    ["=", ..] -> #(advance(scanner, by: 1), token.equal(line, column))
+    ["=", "=", ..] -> #(
+      advance(scanner, by: 2),
+      Ok(token.equal_equal(line, column)),
+    )
+    ["!", "=", ..] -> #(
+      advance(scanner, by: 2),
+      Ok(token.bang_equal(line, column)),
+    )
+    [">", "=", ..] -> #(
+      advance(scanner, by: 2),
+      Ok(token.greater_equal(line, column)),
+    )
+    ["<", "=", ..] -> #(
+      advance(scanner, by: 2),
+      Ok(token.less_equal(line, column)),
+    )
+    ["(", ..] -> #(advance(scanner, by: 1), Ok(token.left_paren(line, column)))
+    [")", ..] -> #(advance(scanner, by: 1), Ok(token.right_paren(line, column)))
+    ["{", ..] -> #(advance(scanner, by: 1), Ok(token.left_brace(line, column)))
+    ["}", ..] -> #(advance(scanner, by: 1), Ok(token.right_brace(line, column)))
+    ["+", ..] -> #(advance(scanner, by: 1), Ok(token.plus(line, column)))
+    ["-", ..] -> #(advance(scanner, by: 1), Ok(token.minus(line, column)))
+    ["*", ..] -> #(advance(scanner, by: 1), Ok(token.star(line, column)))
+    ["/", ..] -> #(advance(scanner, by: 1), Ok(token.slash(line, column)))
+    [",", ..] -> #(advance(scanner, by: 1), Ok(token.comma(line, column)))
+    [";", ..] -> #(advance(scanner, by: 1), Ok(token.semicolon(line, column)))
+    [".", ..] -> #(advance(scanner, by: 1), Ok(token.dot(line, column)))
+    [">", ..] -> #(advance(scanner, by: 1), Ok(token.greater(line, column)))
+    ["<", ..] -> #(advance(scanner, by: 1), Ok(token.less(line, column)))
+    ["!", ..] -> #(advance(scanner, by: 1), Ok(token.bang(line, column)))
+    ["=", ..] -> #(advance(scanner, by: 1), Ok(token.equal(line, column)))
 
     // Whenever we meet a digit we switch to number scanning. The first digit is
     // turned into a `StringBuilder` and then passed to the `scan_number` function
@@ -168,7 +193,13 @@ pub fn next(scanner: Scanner) -> #(Scanner, Token) {
 
         // If the grapheme can not belong to an identifier either then we fail
         // with an error.
-        False -> todo("error!")
+        False -> #(
+          advance(scanner, by: 1),
+          Error(UnexpectedGrapheme(
+            grapheme,
+            span.single_line(on: line, starts_at: column, ends_at: column),
+          )),
+        )
       }
     }
   }
@@ -222,7 +253,7 @@ fn scan_number(
   source: List(String),
   number_length: Int,
   is_int: Bool,
-) -> #(Scanner, Token) {
+) -> #(Scanner, Result(Token, ScannerError)) {
   case source {
     // If a dot is met and it was not previously met (that is `is_int` is True)
     // the dot is appended to the number being scanned and the scanning
@@ -259,7 +290,7 @@ fn scan_number(
         column: column_start + number_length,
         line: line,
       ),
-      Token(
+      Ok(Token(
         token_type: number
         |> string_builder.to_string
         |> token.Number,
@@ -268,7 +299,7 @@ fn scan_number(
           starts_at: column_start,
           ends_at: column_start + number_length - 1,
         ),
-      ),
+      )),
     )
   }
 }
@@ -280,7 +311,7 @@ fn scan_string(
   source: List(String),
   column_end: Int,
   lines: Int,
-) -> #(Scanner, Token) {
+) -> #(Scanner, Result(Token, ScannerError)) {
   // This function is a bit more complicated than what I would have liked
   // in order to take into account multiline strings (that are permitted
   // in the Lox language). Having multiline strings makes it more complex
@@ -304,7 +335,7 @@ fn scan_string(
         column: column_end + 1,
         line: line_start + lines - 1,
       ),
-      Token(
+      Ok(Token(
         token_type: string
         |> string_builder.to_string
         |> token.String,
@@ -314,7 +345,7 @@ fn scan_string(
           line_start: line_start,
           line_end: line_start + lines - 1,
         ),
-      ),
+      )),
     )
 
     // If a newline is met, the number of lines is increased, the final
@@ -333,7 +364,19 @@ fn scan_string(
 
     // If the end of file is met before finding the closing " there's a syntax
     // error.
-    [] -> todo("Unterminated string")
+    [] -> #(
+      Scanner(
+        graphemes: [],
+        column: column_end + 1,
+        line: line_start + lines - 1,
+      ),
+      Error(UnterminatedStringLiteral(Span(
+        column_start: column_start,
+        line_start: line_start,
+        column_end: column_end,
+        line_end: line_start + lines - 1,
+      ))),
+    )
   }
 }
 
@@ -343,7 +386,7 @@ fn scan_identifier(
   column_start: Int,
   source: List(String),
   identifier_length: Int,
-) -> #(Scanner, Token) {
+) -> #(Scanner, Result(Token, ScannerError)) {
   case source {
     // If the end of file is met it means that the identifier is over.
     // It is built from the `identifier` and an updated scanner is returned.
@@ -353,7 +396,7 @@ fn scan_identifier(
         line: line,
         column: column_start + identifier_length,
       ),
-      identifier_token(identifier, line, column_start, identifier_length),
+      Ok(identifier_token(identifier, line, column_start, identifier_length)),
     )
 
     [grapheme, ..rest] ->
@@ -378,7 +421,7 @@ fn scan_identifier(
             line: line,
             column: column_start + identifier_length,
           ),
-          identifier_token(identifier, line, column_start, identifier_length),
+          Ok(identifier_token(identifier, line, column_start, identifier_length)),
         )
       }
   }
