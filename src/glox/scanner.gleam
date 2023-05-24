@@ -263,10 +263,7 @@ pub fn next(scanner: Scanner) -> #(Scanner, Result(Token, ScannerError)) {
         // with an error.
         False -> #(
           advance(scanner, by: 1),
-          Error(UnexpectedGrapheme(
-            grapheme,
-            span.single_line(on: line, starts_at: column, ends_at: column),
-          )),
+          Error(UnexpectedGrapheme(grapheme, span.point(line, column))),
         )
       }
     }

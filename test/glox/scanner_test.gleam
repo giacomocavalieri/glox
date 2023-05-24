@@ -78,10 +78,7 @@ pub fn single_char_tokens_test() {
     source
     |> scan_first
     |> should.be_ok
-    |> should.equal(Token(
-      token_type: expected_type,
-      span: span.single_line(on: 1, starts_at: 1, ends_at: 1),
-    ))
+    |> should.equal(Token(token_type: expected_type, span: span.point(1, 1)))
   })
 }
 
@@ -107,10 +104,7 @@ pub fn number_test() {
   "1"
   |> scan_first
   |> should.be_ok
-  |> should.equal(Token(
-    token_type: token.Number("1"),
-    span: span.single_line(on: 1, starts_at: 1, ends_at: 1),
-  ))
+  |> should.equal(Token(token_type: token.Number("1"), span: span.point(1, 1)))
 
   "123"
   |> scan_first
@@ -371,9 +365,7 @@ pub fn unexpected_grapheme_test() {
   |> scanner.scan
   |> result_extra.from_list_pair
   |> should.be_error
-  |> should.equal([
-    UnexpectedGrapheme("@", span.single_line(on: 1, starts_at: 1, ends_at: 1)),
-  ])
+  |> should.equal([UnexpectedGrapheme("@", span.point(1, 1))])
 
   "@ ~ "
   |> scanner.new
@@ -381,10 +373,21 @@ pub fn unexpected_grapheme_test() {
   |> result_extra.from_list_pair
   |> should.be_error
   |> should.equal([
-    UnexpectedGrapheme("@", span.single_line(on: 1, starts_at: 1, ends_at: 1)),
-    UnexpectedGrapheme("~", span.single_line(on: 1, starts_at: 3, ends_at: 3)),
-    UnexpectedGrapheme(" ", span.single_line(on: 1, starts_at: 4, ends_at: 4)),
+    UnexpectedGrapheme("@", span.point(1, 1)),
+    UnexpectedGrapheme("~", span.point(1, 3)),
+    UnexpectedGrapheme(" ", span.point(1, 4)),
   ])
+
+  "if~{ }"
+  |> scanner.new
+  |> scanner.scan
+  |> should.equal(#(
+    [token.if_(1, 1), token.left_brace(1, 4), token.right_brace(1, 6)],
+    [
+      UnexpectedGrapheme("~", span.point(1, 3)),
+      UnexpectedGrapheme(" ", span.point(1, 5)),
+    ],
+  ))
 }
 
 pub fn unterminated_string_test() {

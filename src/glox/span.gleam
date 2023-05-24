@@ -17,6 +17,10 @@ pub fn single_line(
   )
 }
 
+pub fn point(line: Int, column: Int) -> Span {
+  single_line(on: line, starts_at: column, ends_at: column)
+}
+
 pub fn merge(one: Span, other: Span) -> Span {
   Span(
     line_start: int.min(one.line_start, other.line_start),
