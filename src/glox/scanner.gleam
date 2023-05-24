@@ -441,7 +441,7 @@ fn scan_string(
       Error(UnterminatedStringLiteral(Span(
         column_start: column_start,
         line_start: line_start,
-        column_end: column_end,
+        column_end: column_end - 1,
         line_end: line_start + lines - 1,
       ))),
     )

@@ -1,5 +1,6 @@
 import glacier/should
-import glox/scanner.{ScannerError}
+import glox/scanner.{ScannerError,
+  UnexpectedGrapheme, UnterminatedStringLiteral}
 import glox/token.{Token}
 import gleam/pair
 import gleam/list
@@ -364,6 +365,49 @@ pub fn identifiers_test() {
   ])
 }
 
-pub fn error_case_test() {
-  todo("add test for scanner errors!")
+pub fn unexpected_grapheme_test() {
+  "@"
+  |> scanner.new
+  |> scanner.scan
+  |> result_extra.from_list_pair
+  |> should.be_error
+  |> should.equal([
+    UnexpectedGrapheme("@", span.single_line(on: 1, starts_at: 1, ends_at: 1)),
+  ])
+
+  "@ ~ "
+  |> scanner.new
+  |> scanner.scan
+  |> result_extra.from_list_pair
+  |> should.be_error
+  |> should.equal([
+    UnexpectedGrapheme("@", span.single_line(on: 1, starts_at: 1, ends_at: 1)),
+    UnexpectedGrapheme("~", span.single_line(on: 1, starts_at: 3, ends_at: 3)),
+    UnexpectedGrapheme(" ", span.single_line(on: 1, starts_at: 4, ends_at: 4)),
+  ])
+}
+
+pub fn unterminated_string_test() {
+  "\"hello!"
+  |> scanner.new
+  |> scanner.scan
+  |> result_extra.from_list_pair
+  |> should.be_error
+  |> should.equal([
+    UnterminatedStringLiteral(span.single_line(on: 1, starts_at: 1, ends_at: 7)),
+  ])
+
+  "\"hello how\nare you?"
+  |> scanner.new
+  |> scanner.scan
+  |> result_extra.from_list_pair
+  |> should.be_error
+  |> should.equal([
+    UnterminatedStringLiteral(Span(
+      line_start: 1,
+      line_end: 2,
+      column_start: 1,
+      column_end: 8,
+    )),
+  ])
 }
