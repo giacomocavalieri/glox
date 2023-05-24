@@ -4,6 +4,7 @@ import glox/token.{Token}
 import gleam/pair
 import gleam/list
 import glox/span.{Span}
+import glox/internal/result_extra
 
 fn map_2(over list: List(#(a, b)), with fun: fn(a, b) -> c) -> List(c) {
   list
@@ -145,6 +146,7 @@ pub fn number_test() {
   "123 12.2\n11.1"
   |> scanner.new
   |> scanner.scan
+  |> result_extra.from_list_pair
   |> should.be_ok
   |> should.equal([
     Token(
@@ -164,6 +166,7 @@ pub fn number_test() {
   "-11"
   |> scanner.new
   |> scanner.scan
+  |> result_extra.from_list_pair
   |> should.be_ok
   |> should.equal([
     token.minus(1, 1),
@@ -210,6 +213,7 @@ pub fn string_test() {
   " \"test\nmultiline\" 123 \"test\"11"
   |> scanner.new
   |> scanner.scan
+  |> result_extra.from_list_pair
   |> should.be_ok
   |> should.equal([
     Token(
@@ -263,6 +267,7 @@ pub fn keywords_test() {
   "if.and or else"
   |> scanner.new
   |> scanner.scan
+  |> result_extra.from_list_pair
   |> should.be_ok
   |> should.equal([
     token.if_(1, 1),
@@ -341,6 +346,7 @@ pub fn identifiers_test() {
   "foo bar baz"
   |> scanner.new
   |> scanner.scan
+  |> result_extra.from_list_pair
   |> should.be_ok
   |> should.equal([
     Token(

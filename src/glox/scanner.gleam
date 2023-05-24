@@ -5,6 +5,7 @@ import gleam/list
 import gleam/string_builder.{StringBuilder}
 import glox/span.{Span}
 import glox/internal/string_extra
+import gleam/result
 
 /// A scanner used to scan Lox code.
 /// While behaving like the Loc scanner described in
@@ -22,7 +23,7 @@ pub opaque type Scanner {
   Scanner(graphemes: List(String), line: Int, column: Int)
 }
 
-/// The possible error that could occur during the scanning process
+/// The possible errors that could occur during the scanning process
 pub type ScannerError {
   /// When the scanner encounters a grapheme that does not belong
   /// to its alphabet
@@ -40,12 +41,19 @@ pub fn new(source: String) -> Scanner {
   Scanner(graphemes: string.to_graphemes(source), line: 1, column: 1)
 }
 
-/// Get a stream of tokens from a scanner.
+/// Get a stream of tokens and errors from a scanner.
+/// A scanning error does not result in the scanning process to stop,
+/// the scanner can keep going and still produce other tokens and 
+/// find more errors. This way one can report multiple errors at a time.
 pub fn iterator(scanner: Scanner) -> Iterator(Result(Token, ScannerError)) {
-  // Keep calling the `next` function until Eof is reached.
+  // Keep calling the `next` function until end of file is reached.
   // `next` also provides the new state for the scanning process
   // to continue, that is why the new scanner is used as the
-  // accumulator for the next unfolding step
+  // accumulator for the next unfolding step.
+  //
+  // Note that the `next` step may return an error as well, those do
+  // not stop the scanning process that can keep going; that's why the
+  // iterator returns either a token or an error. 
   use scanner <- iterator.unfold(from: scanner)
   case next(scanner) {
     #(_scanner, Ok(Token(token_type: token.Eof, ..))) -> iterator.Done
@@ -53,26 +61,29 @@ pub fn iterator(scanner: Scanner) -> Iterator(Result(Token, ScannerError)) {
   }
 }
 
-/// Get a list of tokens from a scanner.
+/// Get a list of tokens and scanning errors from a scanner.
 ///
 /// # Examples
 /// ```gleam
 /// "()"
 /// |> scanner.new
 /// |> scanner.scan
-/// // [
-/// //   Token(LeftParen, Span(1, 1, 1, 1)),
-/// //   Token(RightParen, Span(1, 1, 2, 2)),
-/// // ]
+/// // #(
+/// //     [
+/// //        Token(LeftParen, Span(1, 1, 1, 1)),
+/// //        Token(RightParen, Span(1, 1, 2, 2)),
+/// //    ],
+/// //    []
+/// // )
 /// ```
-pub fn scan(scanner: Scanner) -> Result(List(Token), List(ScannerError)) {
+pub fn scan(scanner: Scanner) -> #(List(Token), List(ScannerError)) {
   iterator(scanner)
   |> iterator.to_list
-  //|> result.partition
-  |> todo("result.partition is in gleam 0.29")
+  |> result.partition
 }
 
-/// Scans the scanner's input and returns the next token it finds.
+/// Scans the scanner's input and returns the next token it finds or
+/// an error if there is a problem in the scanning process.
 /// Also returns the updated scanner updating the current line and
 /// column according to the scanned token.
 pub fn next(scanner: Scanner) -> #(Scanner, Result(Token, ScannerError)) {
@@ -81,16 +92,37 @@ pub fn next(scanner: Scanner) -> #(Scanner, Result(Token, ScannerError)) {
 
   // Pattern match on the list of graphemes to find the next token.
   case scanner.graphemes {
-    // If there's no graphemes left in the source code
-    // return the EOF token.
+    // If there's no graphemes left in the source code return the
+    // end of file token.
     [] -> #(scanner, Ok(token.eof(line, column)))
 
     // All newlines are ignored but the state of the scanner must
-    // be updated to take into account the new line: the column
-    // starts back at 1 while the line is incremented.
+    // be updated to take into account the fact that we are on a new line:
+    // the column starts back at 1 while the line is incremented.
+    //
+    // To get a better idea why, imagine scanning this lox code:
+    //
+    // ```lox
+    // if true {\n
+    //          ^------ the scanner is here: line 1, column 10
+    //   return 1;\n
+    // }eof
+    // ```
+    //
+    // After consuming the newline grapheme the scanner will have to update
+    // its position to be on the next line: the current line has to be
+    // incremented, while the column is simply the first one:
+    //
+    // ```lox
+    // if true {\n
+    //   return 1;\n
+    // ^--------------- the scanner is here: line 2, column: 1 
+    // }eof
+    // ```
+    //
     // ("\r\n" is considered a single grapheme)
     // Since a token must still be returned by a call to `next`,
-    // recursivley call it on the new scanner to return a token.
+    // recursivley call it on the updated scanner to return a token.
     ["\r\n", ..rest] | ["\n", ..rest] ->
       Scanner(graphemes: rest, column: 1, line: line + 1)
       |> next
@@ -118,6 +150,39 @@ pub fn next(scanner: Scanner) -> #(Scanner, Result(Token, ScannerError)) {
     // token: Token(token_type: LeftParen, ...)
     // If a token is composed by two graphemes instead of one (like the "=="), we just
     // advance the scanner's column by 2 positions istead of one.
+    //
+    // To get a better feeling of how this works imagine scanning the following lox code:
+    // 
+    // ```lox
+    // var a = (1 == 2)
+    //       ^------------- the scanner is here: line 1, column 7
+    // ```
+    //
+    // The scanner now meets the "=" grapheme so it emits the following token:
+    // `Token(Equal, span.single_line(on: 1, starts_at: 7, ends_at 7))`
+    // Now it has to advance past the consumed token by increasing the column by one.
+    //
+    // ```lox
+    // var a = (1 == 2)
+    //        ^------------ the scanner is here: line 1, column 8
+    // ```
+    // 
+    // A few graphemes later it would be in the following state:
+    //
+    // ```lox
+    // var a = (1 == 2)
+    //            ^-------- the scanner is here: line 1, column 12
+    // ```
+    //
+    // Now it finds a "=" grapheme followed by another "=" so it emits the following token:
+    // `Token(EqualEqual, span.single_line(on: 1, starts_at: 12, ends_at: 13))`
+    // To update the current position it now has to increase the column by 2, since it has
+    // consumed two "=" graphemes:
+    //
+    // ```lox
+    // var a = (1 == 2)
+    //              ^------ the scanner is here: line 1, column 14
+    // ```
     //
     // As a last note: notice how the order of the pattern maching branches is fundamental!
     // The ["=", "=", ..] branch _must_ be placed before the ["=", ..] branch. This is
