@@ -6,6 +6,7 @@ import gleam/string_builder.{StringBuilder}
 import glox/span.{Span}
 import glox/internal/string_extra
 import gleam/result
+import gleam/pair
 
 /// A scanner used to scan Lox code.
 /// While behaving like the Loc scanner described in
@@ -80,6 +81,8 @@ pub fn scan(scanner: Scanner) -> #(List(Token), List(ScannerError)) {
   iterator(scanner)
   |> iterator.to_list
   |> result.partition
+  |> pair.map_first(list.reverse)
+  |> pair.map_second(list.reverse)
 }
 
 /// Scans the scanner's input and returns the next token it finds or
