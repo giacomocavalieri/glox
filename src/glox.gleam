@@ -4,6 +4,11 @@ import gleam/list
 import gleam/result
 import gleam/string
 import glox/scanner
+import glox/parser
+import glox/expression
+import gleam/pair
+import gleam/iterator
+import glox/internal/result_extra
 
 pub fn main() {
   run_prompt()
@@ -24,5 +29,11 @@ fn run(source: String) {
   source
   |> scanner.new
   |> scanner.scan
-  |> list.each(io.debug)
+  |> result_extra.from_list_pair
+  |> result.unwrap(or: [])
+  |> iterator.from_list
+  |> parser.parse
+  |> pair.first
+  |> result.map(expression.to_string)
+  |> io.debug
 }
