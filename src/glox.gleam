@@ -34,6 +34,6 @@ fn run(source: String) {
   |> iterator.from_list
   |> parser.parse
   |> pair.first
-  |> result.map(expression.to_string)
+  |> result.map(expression.eval)
   |> io.debug
 }
