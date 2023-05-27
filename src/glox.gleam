@@ -26,14 +26,25 @@ fn run_prompt() {
 }
 
 fn run(source: String) {
-  source
-  |> scanner.new
-  |> scanner.scan
-  |> result_extra.from_list_pair
-  |> result.unwrap(or: [])
-  |> iterator.from_list
-  |> parser.parse
-  |> pair.first
-  |> result.map(expression.eval)
-  |> io.debug
+  let expression =
+    source
+    |> scanner.new
+    |> scanner.scan
+    |> result_extra.from_list_pair
+    |> result.unwrap(or: [])
+    |> iterator.from_list
+    |> parser.parse
+    |> pair.first
+
+  case expression {
+    Ok(expression) ->
+      expression
+      |> expression.eval
+      |> io.debug
+      |> fn(_) { Nil }
+    Error(error) ->
+      error
+      |> io.debug
+      |> fn(_) { Nil }
+  }
 }

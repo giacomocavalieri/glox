@@ -50,6 +50,7 @@ pub type EvalError {
   // TODO: Add spans to AST nodes as well to keep data about location and report
   // it in the error message!
   WrongType(expected: String, got: LoxValue)
+  DivisionByZero
 }
 
 pub type LoxValue {
@@ -76,24 +77,16 @@ fn eval_unary(
   token: Token,
   expression: Expression,
 ) -> Result(LoxValue, EvalError) {
+  use value <- result.then(eval(expression))
   case token.token_type {
-    token.Bang -> eval_bang(expression)
-    token.Minus -> eval_minus(expression)
-    _ ->
-      string_builder.new()
-      |> string_builder.append("eval unary: tried to eval \"")
-      |> string_builder.append(token.lexeme(token))
-      |> string_builder.append("\" as a unary operator.\n")
-      |> string_builder.append("This should never happen ")
-      |> string_builder.append("and is definitely a bug!")
-      |> string_builder.to_string
-      |> panic
+    token.Bang -> Ok(LoxBool(!is_truthy(value)))
+    token.Minus ->
+      case value {
+        LoxNumber(number) -> Ok(LoxNumber(float.negate(number)))
+        _ -> Error(WrongType(expected: "number", got: value))
+      }
+    _ -> panic
   }
-}
-
-fn eval_bang(expression: Expression) -> Result(LoxValue, EvalError) {
-  use value <- result.map(eval(expression))
-  LoxBool(!is_truthy(value))
 }
 
 fn is_truthy(result: LoxValue) -> Bool {
@@ -103,87 +96,73 @@ fn is_truthy(result: LoxValue) -> Bool {
   }
 }
 
-fn eval_minus(expression: Expression) -> Result(LoxValue, EvalError) {
-  use value <- result.then(eval(expression))
-  case value {
-    LoxNumber(number) -> Ok(LoxNumber(float.negate(number)))
-    _ -> Error(WrongType(expected: "number", got: value))
-  }
-}
-
 fn eval_binary(
-  left: Expression,
+  left_expression: Expression,
   token: Token,
-  right: Expression,
+  right_expression: Expression,
 ) -> Result(LoxValue, EvalError) {
+  use left <- result.then(eval(left_expression))
+  use right <- result.then(eval(right_expression))
+
   case token.token_type {
-    token.Plus -> eval_binary_plus(left, right)
-    token.Minus -> eval_binary_op(left, right, fn(n, m) { LoxNumber(n -. m) })
-    token.Star -> eval_binary_op(left, right, fn(n, m) { LoxNumber(n *. m) })
-    token.Slash -> eval_binary_op(left, right, fn(n, m) { LoxNumber(n /. m) })
-    token.Greater -> eval_binary_op(left, right, fn(n, m) { LoxBool(n >. m) })
-    token.GreaterEqual ->
-      eval_binary_op(left, right, fn(n, m) { LoxBool(n >=. m) })
-    token.Less -> eval_binary_op(left, right, fn(n, m) { LoxBool(n <. m) })
-    token.LessEqual ->
-      eval_binary_op(left, right, fn(n, m) { LoxBool(n <=. m) })
-    token.EqualEqual -> eval_equal(left, right)
-    token.BangEqual -> eval_bang_equal(left, right)
-    _ ->
-      string_builder.new()
-      |> string_builder.append("eval binary: tried to eval \"")
-      |> string_builder.append(token.lexeme(token))
-      |> string_builder.append("\" as a binary operator.\n")
-      |> string_builder.append("This should never happen ")
-      |> string_builder.append("and is definitely a bug!")
-      |> string_builder.to_string
-      |> panic
+    token.Plus -> binary_plus(left, right)
+    token.Minus -> float_to_float(left, right, float.subtract)
+    token.Star -> float_to_float(left, right, float.multiply)
+    token.Slash -> float_to_result(left, right, lox_divide)
+    token.Greater -> float_to_bool(left, right, fn(n, m) { n >. m })
+    token.GreaterEqual -> float_to_bool(left, right, fn(n, m) { n >=. m })
+    token.Less -> float_to_bool(left, right, fn(n, m) { n <. m })
+    token.LessEqual -> float_to_bool(left, right, fn(n, m) { n <=. m })
+    token.EqualEqual -> Ok(LoxBool(left == right))
+    token.BangEqual -> Ok(LoxBool(left != right))
+    _ -> panic
   }
 }
 
-fn eval_binary_plus(left: Expression, right: Expression) {
-  use left_value <- result.then(eval(left))
-  use right_value <- result.then(eval(right))
-  case left_value, right_value {
+fn binary_plus(left: LoxValue, right: LoxValue) -> Result(LoxValue, EvalError) {
+  case left, right {
     LoxNumber(n), LoxNumber(m) -> Ok(LoxNumber(n +. m))
-    LoxNumber(_), _ -> Error(WrongType(expected: "number", got: right_value))
-    _, LoxNumber(_) -> Error(WrongType(expected: "number", got: left_value))
+    LoxNumber(_), _ -> Error(WrongType(expected: "number", got: right))
+    _, LoxNumber(_) -> Error(WrongType(expected: "number", got: left))
     LoxString(s1), LoxString(s2) -> Ok(LoxString(s1 <> s2))
-    LoxString(_), _ -> Error(WrongType(expected: "string", got: right_value))
-    _, LoxString(_) -> Error(WrongType(expected: "string", got: left_value))
-    _, _ -> Error(WrongType(expected: "number or string", got: left_value))
+    LoxString(_), _ -> Error(WrongType(expected: "string", got: right))
+    _, LoxString(_) -> Error(WrongType(expected: "string", got: left))
+    _, _ -> Error(WrongType(expected: "number or string", got: left))
   }
 }
 
-fn eval_binary_op(
-  left: Expression,
-  right: Expression,
-  op: fn(Float, Float) -> LoxValue,
+fn float_to_float(
+  left: LoxValue,
+  right: LoxValue,
+  op: fn(Float, Float) -> Float,
 ) -> Result(LoxValue, EvalError) {
-  use left_value <- result.then(eval(left))
-  use right_value <- result.then(eval(right))
-  case left_value, right_value {
-    LoxNumber(n), LoxNumber(m) -> Ok(op(n, m))
-    LoxNumber(_), _ -> Error(WrongType(expected: "number", got: right_value))
-    _, LoxNumber(_) -> Error(WrongType(expected: "number", got: left_value))
-    _, _ -> Error(WrongType(expected: "number", got: left_value))
+  float_to_result(left, right, fn(n, m) { Ok(LoxNumber(op(n, m))) })
+}
+
+fn float_to_bool(
+  left: LoxValue,
+  right: LoxValue,
+  op: fn(Float, Float) -> Bool,
+) -> Result(LoxValue, EvalError) {
+  float_to_result(left, right, fn(n, m) { Ok(LoxBool(op(n, m))) })
+}
+
+fn float_to_result(
+  left: LoxValue,
+  right: LoxValue,
+  op: fn(Float, Float) -> Result(LoxValue, EvalError),
+) {
+  case left, right {
+    LoxNumber(n), LoxNumber(m) -> op(n, m)
+    LoxNumber(_), _ -> Error(WrongType(expected: "number", got: right))
+    _, LoxNumber(_) -> Error(WrongType(expected: "number", got: left))
+    _, _ -> Error(WrongType(expected: "number", got: left))
   }
 }
 
-fn eval_equal(
-  left: Expression,
-  right: Expression,
-) -> Result(LoxValue, EvalError) {
-  use left_value <- result.then(eval(left))
-  use right_value <- result.map(eval(right))
-  LoxBool(left_value == right_value)
-}
-
-fn eval_bang_equal(
-  left: Expression,
-  right: Expression,
-) -> Result(LoxValue, EvalError) {
-  use left_value <- result.then(eval(left))
-  use right_value <- result.map(eval(right))
-  LoxBool(left_value != right_value)
+fn lox_divide(n: Float, m: Float) -> Result(LoxValue, EvalError) {
+  case m {
+    0.0 -> Error(DivisionByZero)
+    _ -> Ok(LoxNumber(n /. m))
+  }
 }
