@@ -1,5 +1,4 @@
 import glox/token.{Token}
-import glox/span.{Span}
 import gleam/string_builder
 import gleam/list
 import gleam/float
@@ -16,7 +15,12 @@ pub type Expression {
   LiteralString(value: String)
 }
 
-/// Turns an expression into a (not very) pretty string that can be displayed.
+pub type Statement {
+  Expression(expression: Expression)
+  Print(expression: Expression)
+}
+
+/// Turns an expression into a (not very) pretty string.
 pub fn to_string(expression: Expression) -> String {
   case expression {
     Binary(left, operator, right) ->

@@ -1,11 +1,10 @@
 import glox/expression.{Expression}
 import glox/token.{Token, TokenType}
-import gleam/iterator.{Iterator}
 import gleam/list
 import glox/internal/float_extra
 import gleam/result
 import glox/internal/result_extra
-import glox/internal/iterator_extra
+import gleam/pair
 
 pub type ParserContext {
   ParsingGroup(starts_at: Token)
@@ -20,25 +19,25 @@ pub type ParserError {
 }
 
 pub type ParseResult =
-  #(Result(Expression, ParserError), Iterator(Token))
+  #(Result(Expression, ParserError), List(Token))
 
-pub fn parse(tokens: Iterator(Token)) -> ParseResult {
+pub fn parse(tokens: List(Token)) -> ParseResult {
   expression(tokens)
 }
 
 // expression -> equality
-fn expression(tokens: Iterator(Token)) -> ParseResult {
+fn expression(tokens: List(Token)) -> ParseResult {
   equality(tokens)
 }
 
 // equality -> comparison ( ( "==" | "!=" ) comparison )*
-fn equality(tokens: Iterator(Token)) -> ParseResult {
+fn equality(tokens: List(Token)) -> ParseResult {
   comparison(tokens)
   |> zero_or_more([token.EqualEqual, token.BangEqual], comparison)
 }
 
 // comparison -> term ( ( "<=" | "<" | ">" | ">=" ) term )*
-fn comparison(tokens: Iterator(Token)) -> ParseResult {
+fn comparison(tokens: List(Token)) -> ParseResult {
   term(tokens)
   |> zero_or_more(
     [token.Greater, token.GreaterEqual, token.Less, token.LessEqual],
@@ -47,31 +46,31 @@ fn comparison(tokens: Iterator(Token)) -> ParseResult {
 }
 
 // term -> factor ( ( "-" | "+" ) factor )*
-fn term(tokens: Iterator(Token)) -> ParseResult {
+fn term(tokens: List(Token)) -> ParseResult {
   factor(tokens)
   |> zero_or_more([token.Minus, token.Plus], factor)
 }
 
 // factor -> unary ( ( "*" | "/" ) unary )*
-fn factor(tokens: Iterator(Token)) -> ParseResult {
+fn factor(tokens: List(Token)) -> ParseResult {
   unary(tokens)
   |> zero_or_more([token.Slash, token.Star], unary)
 }
 
 // unary -> ( "!" | "-" ) unary | primary
-fn unary(tokens: Iterator(Token)) -> ParseResult {
-  use token, rest <- expect_token(tokens, while: ExpectingUnaryOrPrimary)
-  case token.token_type {
-    token.Bang | token.Minus -> {
-      let #(expression, rest) = unary(rest)
-      #(result.map(expression, expression.Unary(token, _)), rest)
-    }
+fn unary(tokens: List(Token)) -> ParseResult {
+  case tokens {
+    [] -> #(Error(UnexpectedEof(ExpectingUnaryOrPrimary)), [])
+    [Token(token.Bang, ..) as token, ..rest]
+    | [Token(token.Minus, ..) as token, ..rest] ->
+      unary(rest)
+      |> pair.map_first(result.map(_, expression.Unary(token, _)))
     _ -> primary(tokens)
   }
 }
 
 // primary -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")"
-fn primary(tokens: Iterator(Token)) -> ParseResult {
+fn primary(tokens: List(Token)) -> ParseResult {
   use token, rest <- expect_token(tokens, while: ExpectingPrimary)
   case token.token_type {
     token.Number(literal) -> #(Ok(parse_number(literal)), rest)
@@ -85,19 +84,22 @@ fn primary(tokens: Iterator(Token)) -> ParseResult {
 }
 
 fn zero_or_more(
-  from start: ParseResult,
+  from accumulator: ParseResult,
   allowed token_types: List(TokenType),
-  using parser: fn(Iterator(Token)) -> ParseResult,
+  using parser: fn(List(Token)) -> ParseResult,
 ) -> ParseResult {
-  let #(result, tokens) = start
-  use left <- result_extra.map_unwrap(result, on_error: fn(_) { start })
-  use token, rest <- iterator_extra.next_item(tokens, or: #(Ok(left), tokens))
-  case list.contains(token_types, token.token_type) {
-    False -> start
-    True -> {
-      let #(right, rest) = parser(rest)
-      #(result.map(right, expression.Binary(left, token, _)), rest)
-      |> zero_or_more(using: parser, allowed: token_types)
+  let #(result, tokens) = accumulator
+  use left <- result_extra.map_unwrap(result, on_error: fn(_) { accumulator })
+  case tokens {
+    [] -> #(Ok(left), [])
+    [token, ..rest] -> {
+      case list.contains(token_types, token.token_type) {
+        False -> accumulator
+        True ->
+          parser(rest)
+          |> pair.map_first(result.map(_, expression.Binary(left, token, _)))
+          |> zero_or_more(using: parser, allowed: token_types)
+      }
     }
   }
 }
@@ -107,7 +109,7 @@ fn parse_number(literal: String) {
   expression.LiteralNumber(number)
 }
 
-fn parse_group(starts_with: Token, tokens: Iterator(Token)) -> ParseResult {
+fn parse_group(starts_with: Token, tokens: List(Token)) -> ParseResult {
   let #(expression, rest) = expression(tokens)
   use token, rest <- expect_token(from: rest, while: ParsingGroup(starts_with))
   case token.token_type {
@@ -117,29 +119,31 @@ fn parse_group(starts_with: Token, tokens: Iterator(Token)) -> ParseResult {
 }
 
 fn expect_token(
-  from tokens: Iterator(Token),
+  from tokens: List(Token),
   while context: ParserContext,
-  with fun: fn(Token, Iterator(Token)) -> ParseResult,
+  with fun: fn(Token, List(Token)) -> ParseResult,
 ) -> ParseResult {
-  iterator_extra.next_item(
-    from: tokens,
-    or: #(Error(UnexpectedEof(context)), tokens),
-    with: fun,
-  )
+  case tokens {
+    [] -> #(Error(UnexpectedEof(context)), [])
+    [token, ..rest] -> fun(token, rest)
+  }
 }
 
-fn synchronize(tokens: Iterator(Token)) -> Iterator(Token) {
-  use token, rest <- iterator_extra.next_item(from: tokens, or: tokens)
-  case token.token_type {
-    token.Semicolon -> rest
-    token.Class
-    | token.Fun
-    | token.Var
-    | token.For
-    | token.If
-    | token.While
-    | token.Print
-    | token.Return -> tokens
-    _ -> synchronize(rest)
+fn synchronize(tokens: List(Token)) -> List(Token) {
+  case tokens {
+    [] -> []
+    [token, ..rest] ->
+      case token.token_type {
+        token.Semicolon -> rest
+        token.Class
+        | token.Fun
+        | token.Var
+        | token.For
+        | token.If
+        | token.While
+        | token.Print
+        | token.Return -> tokens
+        _ -> synchronize(rest)
+      }
   }
 }
