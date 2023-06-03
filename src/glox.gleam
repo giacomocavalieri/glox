@@ -31,6 +31,7 @@ fn run(source: String) {
     |> result_extra.from_list_pair
     |> result.unwrap(or: [])
     |> parser.parse
+    |> result.partition
     |> pair.first
 
   case expression {

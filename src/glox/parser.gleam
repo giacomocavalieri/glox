@@ -1,10 +1,11 @@
-import glox/expression.{Expression}
+import glox/expression.{Expression, Statement}
 import glox/token.{Token, TokenType}
 import gleam/list
 import glox/internal/float_extra
 import gleam/result
 import glox/internal/result_extra
 import gleam/pair
+import gleam/bool
 
 pub type ParserContext {
   ParsingGroup(starts_at: Token)
@@ -21,8 +22,27 @@ pub type ParserError {
 pub type ParseResult =
   #(Result(Expression, ParserError), List(Token))
 
-pub fn parse(tokens: List(Token)) -> ParseResult {
-  expression(tokens)
+pub fn parse(tokens: List(Token)) -> List(Result(Statement, ParserError)) {
+  do_parse(tokens, [])
+}
+
+pub fn do_parse(
+  tokens: List(Token),
+  acc: List(Result(Statement, ParserError)),
+) -> List(Result(Statement, ParserError)) {
+  case tokens {
+    [] -> list.reverse(acc)
+    _ -> {
+      let #(result, rest) = statement(tokens)
+      do_parse(rest, [result, ..acc])
+    }
+  }
+}
+
+fn statement(
+  tokens: List(Token),
+) -> #(Result(Statement, ParserError), List(Token)) {
+  todo
 }
 
 // expression -> equality
