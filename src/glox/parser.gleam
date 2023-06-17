@@ -5,10 +5,11 @@ import glox/internal/float_extra
 import gleam/result
 import glox/internal/result_extra
 import gleam/pair
-import gleam/bool
 
 pub type ParserContext {
   ParsingGroup(starts_at: Token)
+  ParsingPrint
+  ParsingExpression
   ExpectingPrimary
   ExpectingUnaryOrPrimary
   ExpectingExpression
@@ -17,16 +18,17 @@ pub type ParserContext {
 pub type ParserError {
   UnexpectedEof(context: ParserContext)
   UnexpectedToken(token: Token, context: ParserContext)
+  MissingSemicolon(context: ParserContext)
 }
 
-pub type ParseResult =
-  #(Result(Expression, ParserError), List(Token))
+pub type ParseResult(a) =
+  #(Result(a, ParserError), List(Token))
 
 pub fn parse(tokens: List(Token)) -> List(Result(Statement, ParserError)) {
   do_parse(tokens, [])
 }
 
-pub fn do_parse(
+fn do_parse(
   tokens: List(Token),
   acc: List(Result(Statement, ParserError)),
 ) -> List(Result(Statement, ParserError)) {
@@ -39,25 +41,48 @@ pub fn do_parse(
   }
 }
 
-fn statement(
-  tokens: List(Token),
-) -> #(Result(Statement, ParserError), List(Token)) {
-  todo
+fn statement(tokens: List(Token)) -> ParseResult(Statement) {
+  case tokens {
+    [Token(token.Print, ..), ..rest] -> print_statement(rest)
+    _ -> expression_statement(tokens)
+  }
+}
+
+fn print_statement(tokens: List(Token)) -> ParseResult(Statement) {
+  case expression(tokens) {
+    #(Error(error), rest) -> #(Error(error), rest)
+    #(Ok(expression), [Token(token.Semicolon, ..), ..rest]) -> #(
+      Ok(expression.Print(expression)),
+      rest,
+    )
+    #(Ok(_), rest) -> #(Error(MissingSemicolon(ParsingPrint)), rest)
+  }
+}
+
+fn expression_statement(tokens: List(Token)) -> ParseResult(Statement) {
+  case expression(tokens) {
+    #(Error(error), rest) -> #(Error(error), rest)
+    #(Ok(expression), [Token(token.Semicolon, ..), ..rest]) -> #(
+      Ok(expression.Expression(expression)),
+      rest,
+    )
+    #(Ok(_), rest) -> #(Error(MissingSemicolon(ParsingExpression)), rest)
+  }
 }
 
 // expression -> equality
-fn expression(tokens: List(Token)) -> ParseResult {
+fn expression(tokens: List(Token)) -> ParseResult(Expression) {
   equality(tokens)
 }
 
 // equality -> comparison ( ( "==" | "!=" ) comparison )*
-fn equality(tokens: List(Token)) -> ParseResult {
+fn equality(tokens: List(Token)) -> ParseResult(Expression) {
   comparison(tokens)
   |> zero_or_more([token.EqualEqual, token.BangEqual], comparison)
 }
 
 // comparison -> term ( ( "<=" | "<" | ">" | ">=" ) term )*
-fn comparison(tokens: List(Token)) -> ParseResult {
+fn comparison(tokens: List(Token)) -> ParseResult(Expression) {
   term(tokens)
   |> zero_or_more(
     [token.Greater, token.GreaterEqual, token.Less, token.LessEqual],
@@ -66,19 +91,19 @@ fn comparison(tokens: List(Token)) -> ParseResult {
 }
 
 // term -> factor ( ( "-" | "+" ) factor )*
-fn term(tokens: List(Token)) -> ParseResult {
+fn term(tokens: List(Token)) -> ParseResult(Expression) {
   factor(tokens)
   |> zero_or_more([token.Minus, token.Plus], factor)
 }
 
 // factor -> unary ( ( "*" | "/" ) unary )*
-fn factor(tokens: List(Token)) -> ParseResult {
+fn factor(tokens: List(Token)) -> ParseResult(Expression) {
   unary(tokens)
   |> zero_or_more([token.Slash, token.Star], unary)
 }
 
 // unary -> ( "!" | "-" ) unary | primary
-fn unary(tokens: List(Token)) -> ParseResult {
+fn unary(tokens: List(Token)) -> ParseResult(Expression) {
   case tokens {
     [] -> #(Error(UnexpectedEof(ExpectingUnaryOrPrimary)), [])
     [Token(token.Bang, ..) as token, ..rest]
@@ -90,7 +115,7 @@ fn unary(tokens: List(Token)) -> ParseResult {
 }
 
 // primary -> NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")"
-fn primary(tokens: List(Token)) -> ParseResult {
+fn primary(tokens: List(Token)) -> ParseResult(Expression) {
   use token, rest <- expect_token(tokens, while: ExpectingPrimary)
   case token.token_type {
     token.Number(literal) -> #(Ok(parse_number(literal)), rest)
@@ -104,10 +129,10 @@ fn primary(tokens: List(Token)) -> ParseResult {
 }
 
 fn zero_or_more(
-  from accumulator: ParseResult,
+  from accumulator: ParseResult(Expression),
   allowed token_types: List(TokenType),
-  using parser: fn(List(Token)) -> ParseResult,
-) -> ParseResult {
+  using parser: fn(List(Token)) -> ParseResult(Expression),
+) -> ParseResult(Expression) {
   let #(result, tokens) = accumulator
   use left <- result_extra.map_unwrap(result, on_error: fn(_) { accumulator })
   case tokens {
@@ -129,7 +154,10 @@ fn parse_number(literal: String) {
   expression.LiteralNumber(number)
 }
 
-fn parse_group(starts_with: Token, tokens: List(Token)) -> ParseResult {
+fn parse_group(
+  starts_with: Token,
+  tokens: List(Token),
+) -> ParseResult(Expression) {
   let #(expression, rest) = expression(tokens)
   use token, rest <- expect_token(from: rest, while: ParsingGroup(starts_with))
   case token.token_type {
@@ -141,8 +169,8 @@ fn parse_group(starts_with: Token, tokens: List(Token)) -> ParseResult {
 fn expect_token(
   from tokens: List(Token),
   while context: ParserContext,
-  with fun: fn(Token, List(Token)) -> ParseResult,
-) -> ParseResult {
+  with fun: fn(Token, List(Token)) -> ParseResult(a),
+) -> ParseResult(a) {
   case tokens {
     [] -> #(Error(UnexpectedEof(context)), [])
     [token, ..rest] -> fun(token, rest)

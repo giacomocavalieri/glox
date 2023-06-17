@@ -4,6 +4,7 @@ import gleam/list
 import gleam/float
 import gleam/bool
 import gleam/result
+import gleam/io
 
 pub type Expression {
   Binary(left: Expression, operator: Token, right: Expression)
@@ -64,14 +65,39 @@ pub type LoxValue {
   LoxString(value: String)
 }
 
-/// Evals an expression
-pub fn eval(expression: Expression) -> Result(LoxValue, EvalError) {
+fn lox_value_to_string(value: LoxValue) {
+  case value {
+    LoxBool(bool) -> bool.to_string(bool)
+    LoxNumber(float) -> float.to_string(float)
+    LoxNil -> "nil"
+    LoxString(string) -> string
+  }
+}
+
+pub fn eval(program: List(Statement)) -> Result(Nil, EvalError) {
+  program
+  |> list.try_each(eval_statement)
+}
+
+fn eval_statement(statement: Statement) -> Result(Nil, EvalError) {
+  case statement {
+    Print(expression) ->
+      eval_expression(expression)
+      |> result.map(fn(e) { io.println(lox_value_to_string(e)) })
+      |> result.replace(Nil)
+    Expression(expression) ->
+      eval_expression(expression)
+      |> result.replace(Nil)
+  }
+}
+
+fn eval_expression(expression: Expression) -> Result(LoxValue, EvalError) {
   case expression {
     LiteralBool(value) -> Ok(LoxBool(value))
     LiteralNumber(value) -> Ok(LoxNumber(value))
     LiteralString(value) -> Ok(LoxString(value))
     LiteralNil -> Ok(LoxNil)
-    Grouping(expression) -> eval(expression)
+    Grouping(expression) -> eval_expression(expression)
     Unary(token, expression) -> eval_unary(token, expression)
     Binary(left, token, right) -> eval_binary(left, token, right)
   }
@@ -81,7 +107,7 @@ fn eval_unary(
   token: Token,
   expression: Expression,
 ) -> Result(LoxValue, EvalError) {
-  use value <- result.then(eval(expression))
+  use value <- result.then(eval_expression(expression))
   case token.token_type {
     token.Bang -> Ok(LoxBool(!is_truthy(value)))
     token.Minus ->
@@ -105,8 +131,8 @@ fn eval_binary(
   token: Token,
   right_expression: Expression,
 ) -> Result(LoxValue, EvalError) {
-  use left <- result.then(eval(left_expression))
-  use right <- result.then(eval(right_expression))
+  use left <- result.then(eval_expression(left_expression))
+  use right <- result.then(eval_expression(right_expression))
 
   case token.token_type {
     token.Plus -> binary_plus(left, right)

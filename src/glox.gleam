@@ -23,26 +23,17 @@ fn run_prompt() {
   }
 }
 
-fn run(source: String) {
-  let expression =
-    source
-    |> scanner.new
-    |> scanner.scan
-    |> result_extra.from_list_pair
-    |> result.unwrap(or: [])
-    |> parser.parse
-    |> result.partition
-    |> pair.first
+fn run(source: String) -> Nil {
+  source
+  |> scanner.new
+  |> scanner.scan
+  |> result_extra.from_list_pair
+  |> result.unwrap(or: [])
+  |> parser.parse
+  |> result.partition
+  |> io.debug
+  |> pair.first
+  |> expression.eval
 
-  case expression {
-    Ok(expression) ->
-      expression
-      |> expression.eval
-      |> io.debug
-      |> fn(_) { Nil }
-    Error(error) ->
-      error
-      |> io.debug
-      |> fn(_) { Nil }
-  }
+  Nil
 }
